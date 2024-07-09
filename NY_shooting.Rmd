@@ -1,0 +1,147 @@
+---
+title: "NYPD Shooting Incident"
+author: "Sorabh Kaila"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Analysis of NY shooting incidents from 2005 to 2023 and understand the trends, underlying factors etc.
+
+## Import NYPD shooting data from the city of New York website (url below). 
+## This gives details such as data by Borough, location of incident, ## murder(y/n), age - group/sex/race of victim and perpeterator etc.
+```{r}
+##install.packages("tidyverse")
+library(tidyverse)
+url = "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+ny = read_csv(url)
+head(ny)
+```
+
+## Summary of the data
+```{r}
+summary(ny)
+```
+
+## Transforming Data
+
+### Remove columns not needed
+```{r}
+ny = subset(ny,select = -c(X_COORD_CD,Y_COORD_CD,Latitude, Longitude, Lon_Lat))
+summary(ny)
+```
+
+### Change format of columns
+```{r}
+library(lubridate)
+ny = ny%>%mutate(ny, OCCUR_DATE = mdy(OCCUR_DATE))
+ny$PRECINCT = as.character(ny$PRECINCT)
+ny$JURISDICTION_CODE = as.character(ny$JURISDICTION_CODE)
+
+summary(ny)
+```
+
+### Extract hour of day from Occur_time
+```{r}
+ny$OCCUR_TIME = hour(ny$OCCUR_TIME)
+head(ny$OCCUR_TIME)
+```
+
+### Count of Missing Values
+```{r}
+sapply(ny,function(x) sum(is.na(x)))
+```
+
+### Since most values are missing for Loc_of_occur & Loc_classfctn, drop these columns
+```{r}
+ny = subset(ny,select = -c(LOC_OF_OCCUR_DESC,LOC_CLASSFCTN_DESC))
+```
+
+### There are a lot of missing values in Location_Desc, Perp_Age_Group, Perp_Sex and Perp_Race but we will these fields as is for now as we may need them for analysis later.
+
+## Data Analysis and Visualization
+### Trend by Year and Month
+```{r}
+ny = ny%>%mutate(ny, OCCUR_YEAR = year(OCCUR_DATE))
+head(ny$OCCUR_YEAR)
+
+ny_year_total = ny %>% group_by(OCCUR_YEAR) %>% tally
+max(ny_year_total)
+min(ny_year_total)
+mean(ny_year_total$n)
+```
+
+### Avg. cases per year is 1587. Min of 958 cases in 2018. Max 2055 in 2006. What would cause such a low number of cases in 2017-2019??
+
+### Plot the data by year...Cases trending down since 2005 and hit their lowest point in 2019. There is a sudden rise in 2020 & 2021 and then they again go down in 2023. What happ in 2020-2022 (covid??)?
+```{r}
+par(mar = c(1, 1, 1, 1))
+ny_year_total %>%
+ggplot(aes(x=OCCUR_YEAR, y = n))+
+geom_line(aes(color="n"))+
+geom_point(aes(color="n"))+
+  geom_text(aes(label=n),size=2,vjust="outward",hjust="outward")
+```
+
+### Incidents by Borough
+```{r}
+ny_borough_total = ny %>% group_by(BORO) %>% tally
+ny_borough_total
+```
+
+### Max cases in Brooklyn and Min in Staten Islan
+### Lets look at cases as % of population
+### Pop Source https://www.citypopulation.de/en/usa/newyorkcity/
+```{r}
+pop = c(1356479,2561225,1594751,2252196,190687)
+ny_borough_total = ny_borough_total %>% mutate(ny_borough_total,population = pop) %>% mutate(ny_borough_total,cases_per_pop = (n/population)*100)
+```
+
+### Bronx has the highest % followed by Brooklyn. Need to investigate what is causing Bronx crime rate to be this high compared to Queens which is extremely low?
+
+## Visualize data by borough
+```{r}
+ny_borough_total %>%
+ggplot(aes(x=BORO, y = cases_per_pop))+
+geom_bar(position='dodge',stat = 'identity',color='green',fill='green')+
+  ggtitle("Cases by Borough in NY")+
+  geom_text(aes(label = round(cases_per_pop,2)),size=3,color="black",vjust="inward")
+```
+
+## Visualize data by time of day
+```{r}
+ny_time = ny %>% group_by(OCCUR_TIME) %>% tally
+ny_time
+
+
+ny_time %>% ggplot(aes(x=OCCUR_TIME, y = n))+
+geom_line(aes(color="n"))+
+geom_point(aes(color="n"))
+```
+
+## Visualize data by victim race
+```{r}
+ny_race = ny %>% group_by(VIC_RACE) %>% tally
+ny_race
+
+ny_race %>%
+ggplot(aes(x=VIC_RACE, y = n))+
+geom_bar(position='dodge',stat = 'identity',color='green',fill='green')+
+  ggtitle("Cases by Victim's race")+
+  geom_text(aes(label = n),size=3,color="black",vjust="inward")+
+  theme(axis.text.x = element_text(size=6, angle = 90))
+
+```
+
+
+## Bias in the data
+### Looking at cases per borough, we are analyzing based on the population of a borough. That might be a bias in how data is measured for Bronx and Brooklyn compared to other Boroughs.
+
+### There might be a change in NY shooting data from 2005 to 2023 and that would introduce bias in our analysis. We may need to understand how this data is measured and if there have been changes since 2005 that could explain some of the variances by year.
+
+### Based on the initial analysis it does look like the cases reduced from 2005 to 2019 (lowest from 2017 to 2019). They started rising again from 2020 before coming down in 2023.Need to investigate further.
+
+### Bronx and Brooklyn seems to have a very high shooting rate. Need to investigate what could be causing these high rates.
